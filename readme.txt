@@ -4,7 +4,8 @@
 =====================================================================
 
 Project type : Artificial Intelligence merit badge project (design phase)
-Status       : Planning / outline only. No code has been written yet.
+Status       : The main window (panes, sidebar, save/open, undo/redo) is
+               built. The AI parts are not built yet. See section 15.
 Platforms    : Windows, macOS, and Linux (one codebase)
 Repository   : khaudeminyen/cleanmydesk
 
@@ -399,12 +400,80 @@ ways to get them:
 
 
 ---------------------------------------------------------------------
-15. HOW TO READ THIS PROJECT
+15. CURRENT STATUS AND HOW TO RUN THE APP
 ---------------------------------------------------------------------
 
-  This project is currently a plan. The next step is Milestone 1:
-  building the desk, item, and profile classes, plus their tests.
-  No application code exists in the repository yet.
+15.1  What is built so far
+
+  The main window looks like this:
+
+    +------+-------------------------------+---------------+
+    | Undo | Desk layout             + -   | Items on  + - |
+    | Redo |   (top-down desk drawing)     | desk          |
+    | New  |                               |  (list with   |
+    | Save +-------------------------------+  sizes)       |
+    | Open | Item dimensions         + -   |               |
+    | +Pane|   desk size, item table,      |               |
+    | xPane|   Add item / Remove item      |               |
+    |      |                               |               |
+    | Gear |                               |               |
+    +------+-------------------------------+---------------+
+
+  Panes
+    - Desk layout      Draws the desk and items to scale, seen from
+                       above. For now the items are just lined up by
+                       size. The AI suggestion engine will replace this.
+    - Items on desk    Lists every item with its width, depth, height,
+                       and where the size came from (measured or AI).
+                       This list is read-only. To change the desk, use
+                       the Item dimensions pane.
+    - Item dimensions  Change the desk size, add or remove items, and
+                       double-click any cell to change a name or size.
+                       Sizes typed here count as manual measurements.
+
+    The - button closes a pane, and it disappears. The + button opens a
+    pane that was closed. When every pane is closed, an "Add pane"
+    button appears in the middle of the window.
+
+    Opening and closing panes only changes how the window looks. It is
+    not saved in the project and never counts as an unsaved change, but
+    it can still be undone.
+
+  Sidebar (top to bottom)
+    Undo          Undo the last change: a size edit, an added or removed
+                  item, or a pane being opened or closed.
+    Redo          Undo the undo.
+    New project   Start over. Asks Save / Discard / Cancel if there are
+                  unsaved changes.
+    Save          Save the project. The first time, it asks where to
+                  save it (Ctrl+Shift+S always asks).
+    Open          Open a saved project. Asks Save / Discard / Cancel if
+                  there are unsaved changes.
+    Open a pane   Pick a collapsed or closed pane to bring back.
+    Close a pane  Pick a pane to close.
+    (gear)        Not assigned yet.
+
+  Projects are saved as .cmdesk files. They are plain JSON text files
+  that hold the desk size and the items.
+
+15.2  How to run it
+
+  You need Python 3.10 or newer. From the project folder:
+
+    python -m venv .venv
+    .venv\Scripts\activate          (Windows)
+    source .venv/bin/activate       (macOS and Linux)
+    pip install -e ".[dev]"
+    python -m cleanmydesk
+
+  To run the tests:
+
+    python -m pytest
+
+15.3  What comes next
+
+  The AI parts: the layout suggestion engine (section 5), the camera
+  and object recognition (section 6), and learning from feedback.
 
 =====================================================================
   End of readme.txt
