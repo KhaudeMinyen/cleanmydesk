@@ -64,8 +64,9 @@ learn from feedback. The AI parts of the project are:
   [2] Desk Setup            - enter the desk width and depth (or
                               calibrate with a camera).
   [3] Item Inventory        - list of items on the desk, each with a
-                              name, category, size, and how often it
-                              is used.
+                              name, category, size, size source
+                              (AI or manual), and how often it is used.
+                              Sizes can be typed in or edited here.
   [4] Work Profile          - short questionnaire about the user's
                               habits (see section 4).
   [5] Suggestion View       - top-down diagram of the current desk
@@ -84,6 +85,13 @@ learn from feedback. The AI parts of the project are:
                              example, an ArUco marker) placed on the
                              desk so the app can convert pixels into
                              centimeters or inches.
+  F3a. Manual size entry     The user types in the width, depth, and
+                             height of any object by hand. Works with
+                             or without a camera.
+  F3b. Size source choice    Each object records how its size was found:
+                             "AI image analysis" or "Manual measurement".
+                             The app shows the source next to each size
+                             so the user knows how much to trust it.
   F4. Work profile           Store the user's handedness, main tasks,
                              and usage frequency for each item.
   F5. Layout suggestion      Generate one or more improved layouts.
@@ -127,6 +135,7 @@ learn from feedback. The AI parts of the project are:
   - Category (screen, input device, writing, drink, phone, paper,
     personal item, and so on)
   - Width, depth, and height
+  - Size source: "AI image analysis" or "Manual measurement"
   - Usage frequency: rarely, sometimes, often, or constantly
   - Fixed flag: items that must stay where they are (for example, a
     monitor that is mounted)
@@ -192,6 +201,40 @@ Step 5  Learn               When the user accepts a suggestion, its
   Fallback: if the camera is not available or the detection is poor,
   the user enters the items by hand. The app works fully without a
   camera.
+
+
+---------------------------------------------------------------------
+6A. TWO WAYS TO GET AN OBJECT'S SIZE
+---------------------------------------------------------------------
+
+Every object on the desk needs a width and depth. The app offers two
+ways to get them:
+
+  Method 1 - AI image analysis
+    The camera photo is analyzed (section 6) and the object's size is
+    estimated from the reference marker. This is quick and needs no
+    tape measure, but the estimate can be off, especially for objects
+    that are partly hidden or that sit at an angle.
+
+  Method 2 - Manual measurement
+    The user measures the object with a ruler or tape measure and types
+    the numbers in. This is the most accurate method and works without
+    a camera.
+
+  Rules for both methods:
+    - Each object stores which method produced its size (the "size
+      source" field), so the user always knows where a number came from.
+    - AI estimates are marked as estimates and can be replaced at any
+      time with a manual measurement. A manual value always takes
+      priority over an AI value.
+    - The user can switch methods for any object at any time, from the
+      Item Inventory screen.
+    - The layout engine uses the same size data either way. The only
+      difference is how much the suggestion can be trusted, so the app
+      shows a small note on any layout that relies on AI estimates.
+    - Manual entry checks that the value is a positive number and is
+      not larger than the desk. Units follow the Settings screen (cm
+      or inches).
 
 
 ---------------------------------------------------------------------
@@ -263,7 +306,8 @@ Step 5  Learn               When the user accepts a suggestion, its
                for each move. Command-line demo.
 
   Milestone 3  Desktop interface
-               Screens F1 to F7 with manual entry only.
+               Screens F1 to F7 with manual entry only, including
+               manual size entry (F3a) and the size source label (F3b).
 
   Milestone 4  Camera and vision
                Marker calibration, object detection, and the confirm
@@ -283,6 +327,10 @@ Step 5  Learn               When the user accepts a suggestion, its
 ---------------------------------------------------------------------
 
   - Unit tests    Scoring rules, overlap checks, zone assignment.
+  - Size tests    Manual sizes are saved correctly. Invalid values
+                  (zero, negative, or larger than the desk) are
+                  rejected. A manual size overrides an AI estimate.
+                  Switching the size source keeps the other value.
   - Search tests  Known desks with known good answers (for example, a
                   phone should never be placed in Zone 1 for a user who
                   never uses it).
@@ -303,9 +351,10 @@ Step 5  Learn               When the user accepts a suggestion, its
   items                             them edit everything. Manual entry
                                     always works.
 
-  Size estimates are off            Calibrate with a marker. Show the
-                                    measured size and let the user
-                                    correct it.
+  Size estimates are off            Calibrate with a marker. Label each
+                                    size as AI or manual, and let the
+                                    user replace any estimate with a
+                                    manual measurement.
 
   Suggestions feel random           Explain every move. Start with a
                                     simple, transparent scoring rule.
