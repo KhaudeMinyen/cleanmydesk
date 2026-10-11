@@ -1,4 +1,4 @@
-"""Arranges the three panes and shows "Add pane" when none is expanded.
+"""Arranges the three panes and shows "Add pane" when all are closed.
 
     +---------------------------+-------------+
     | Desk layout               | Items on    |
@@ -6,6 +6,10 @@
     +---------------------------+             |
     | Item dimensions           |             |
     +---------------------------+-------------+
+
+Which panes are open is only how the window looks. It is not part of the
+project, so it is not saved and never counts as an unsaved change, but
+opening and closing panes can still be undone.
 """
 
 from __future__ import annotations
@@ -20,23 +24,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from cleanmydesk.commands import SetPaneStateCommand
-from cleanmydesk.document import (
-    PANE_CLOSED,
-    PANE_COLLAPSED,
-    PANE_EXPANDED,
-    ProjectDocument,
-)
+from cleanmydesk.commands import SetPaneOpenCommand
 from cleanmydesk.ui.icons import icon
-from cleanmydesk.ui.pane import MAX_SIZE, Pane
+from cleanmydesk.ui.pane import Pane
 
 
 class PaneArea(QWidget):
-    add_pane_clicked = Signal()
+    add_pane_clicked = Signal(QWidget)  # the button that was clicked
+    panes_changed = Signal()
 
     def __init__(
         self,
-        doc: ProjectDocument,
         undo_stack: QUndoStack,
         layout_pane: Pane,
         dimensions_pane: Pane,
@@ -44,9 +42,9 @@ class PaneArea(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.doc = doc
         self.undo_stack = undo_stack
         self.panes = {p.pane_id: p for p in (layout_pane, dimensions_pane, items_pane)}
+        self._open = {pane_id: True for pane_id in self.panes}
 
         self.left_splitter = QSplitter(Qt.Orientation.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
@@ -54,101 +52,60 @@ class PaneArea(QWidget):
         self.left_splitter.addWidget(dimensions_pane)
         self.left_splitter.setSizes([400, 250])
 
-        # Shown in place of the panes when none of them is expanded.
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.addWidget(self.left_splitter)
+        self.main_splitter.addWidget(items_pane)
+        self.main_splitter.setSizes([650, 300])
+
+        # Shown in place of the panes when every pane is closed.
         self.empty_state = QWidget()
         empty_layout = QVBoxLayout(self.empty_state)
         empty_layout.addStretch(1)
-        hint = QLabel("All panes are collapsed or closed.")
+        hint = QLabel("All panes are closed.")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.add_pane_button = QPushButton(icon("add_pane"), "Add pane")
-        self.add_pane_button.clicked.connect(self.add_pane_clicked)
+        self.add_pane_button.clicked.connect(lambda: self.add_pane_clicked.emit(self.add_pane_button))
         empty_layout.addWidget(hint)
         empty_layout.addWidget(self.add_pane_button, 0, Qt.AlignmentFlag.AlignHCenter)
         empty_layout.addStretch(1)
 
-        self.left_column = QWidget()
-        left_layout = QVBoxLayout(self.left_column)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.addWidget(self.left_splitter, 1)
-        left_layout.addWidget(self.empty_state, 1)
-
-        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.main_splitter.setChildrenCollapsible(False)
-        self.main_splitter.addWidget(self.left_column)
-        self.main_splitter.addWidget(items_pane)
-        self.main_splitter.setSizes([650, 300])
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self.main_splitter)
+        layout.addWidget(self.empty_state)
 
         for pane in self.panes.values():
-            pane.expand_clicked.connect(lambda p=pane: self.request_state(p.pane_id, PANE_EXPANDED))
-            pane.collapse_clicked.connect(lambda p=pane: self.request_state(p.pane_id, PANE_COLLAPSED))
-
-        doc.pane_state_changed.connect(self._on_pane_state_changed)
-        doc.project_replaced.connect(self.sync_from_document)
-        self.sync_from_document()
-
-    # Called by the +/− buttons and by the sidebar menus.
-    def request_state(self, pane_id: str, state: str) -> None:
-        if self.doc.pane_state(pane_id) != state:
-            self.undo_stack.push(
-                SetPaneStateCommand(self.doc, pane_id, self.panes[pane_id].title, state)
-            )
-
-    def panes_not_expanded(self) -> list[Pane]:
-        return [p for p in self.panes.values() if p.state != PANE_EXPANDED]
-
-    def panes_open(self) -> list[Pane]:
-        return [p for p in self.panes.values() if p.state != PANE_CLOSED]
-
-    def sync_from_document(self) -> None:
-        for pane_id, pane in self.panes.items():
-            pane.apply_state(self.doc.pane_state(pane_id))
+            pane.add_clicked.connect(self.add_pane_clicked)
+            pane.close_clicked.connect(lambda p=pane: self.request_open(p.pane_id, False))
         self._update_layout()
 
-    def _on_pane_state_changed(self, pane_id: str, state: str) -> None:
-        pane = self.panes[pane_id]
-        was_collapsed = pane.state == PANE_COLLAPSED
-        pane.apply_state(state)
+    def is_open(self, pane_id: str) -> bool:
+        return self._open[pane_id]
+
+    def open_panes(self) -> list[Pane]:
+        return [p for p in self.panes.values() if self._open[p.pane_id]]
+
+    def closed_panes(self) -> list[Pane]:
+        return [p for p in self.panes.values() if not self._open[p.pane_id]]
+
+    # Called by the − buttons and by the sidebar menus.
+    def request_open(self, pane_id: str, is_open: bool) -> None:
+        if self._open[pane_id] != is_open:
+            self.undo_stack.push(SetPaneOpenCommand(self, pane_id, is_open))
+
+    # Called by SetPaneOpenCommand.
+    def set_pane_open(self, pane_id: str, is_open: bool) -> None:
+        self._open[pane_id] = is_open
+        self.panes[pane_id].setVisible(is_open)
         self._update_layout()
-        if was_collapsed and state == PANE_EXPANDED:
-            self._restore_size(pane)
+        self.panes_changed.emit()
 
     def _update_layout(self) -> None:
-        states = {pane_id: pane.state for pane_id, pane in self.panes.items()}
-        any_expanded = PANE_EXPANDED in states.values()
-        left_ids = [self.left_splitter.widget(i).pane_id for i in range(self.left_splitter.count())]
-        left_states = [states[pane_id] for pane_id in left_ids]
-        left_open = any(s != PANE_CLOSED for s in left_states)
-
-        self.empty_state.setVisible(not any_expanded)
+        left_open = any(self._open[self.left_splitter.widget(i).pane_id] for i in range(self.left_splitter.count()))
+        any_open = any(self._open.values())
         self.left_splitter.setVisible(left_open)
-        self.left_column.setVisible(left_open or not any_expanded)
-
-        # With nothing expanded on the left, the splitter only needs room
-        # for the title bars; the rest of the column stays free.
-        if left_open and PANE_EXPANDED not in left_states:
-            bars = [p.maximumHeight() for p in self.panes.values() if p.pane_id in left_ids and p.isVisibleTo(self)]
-            handles = self.left_splitter.handleWidth() * (len(bars) - 1)
-            self.left_splitter.setMaximumHeight(sum(bars) + handles)
-        else:
-            self.left_splitter.setMaximumHeight(MAX_SIZE)
-
-    def _restore_size(self, pane: Pane) -> None:
-        """Give a re-expanded pane back the size it had before collapsing."""
-        splitter = pane.parentWidget()
-        if not isinstance(splitter, QSplitter) or pane.last_expanded_size <= 0:
-            return
-        sizes = splitter.sizes()
-        index = splitter.indexOf(pane)
-        total = sum(sizes)
-        others = total - sizes[index]
-        wanted = min(pane.last_expanded_size, max(total - 60, 0))
-        if others <= 0:
-            return
-        scale = (total - wanted) / others
-        new_sizes = [round(size * scale) for size in sizes]
-        new_sizes[index] = wanted
-        splitter.setSizes(new_sizes)
+        self.main_splitter.setVisible(any_open)
+        self.empty_state.setVisible(not any_open)
+        for pane in self.panes.values():
+            pane.add_button.setEnabled(not all(self._open.values()))

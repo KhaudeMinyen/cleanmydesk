@@ -15,20 +15,21 @@ FIELD_LABELS = {
 }
 
 
-class SetPaneStateCommand(QUndoCommand):
-    def __init__(self, doc: ProjectDocument, pane_id: str, title: str, state: str) -> None:
-        verbs = {"expanded": "Expand", "collapsed": "Collapse", "closed": "Close"}
-        super().__init__(f"{verbs[state]} {title} pane")
-        self.doc = doc
+class SetPaneOpenCommand(QUndoCommand):
+    """Open or close a pane. This changes only the window, not the project."""
+
+    def __init__(self, pane_area, pane_id: str, is_open: bool) -> None:
+        title = pane_area.panes[pane_id].title
+        super().__init__(f"{'Open' if is_open else 'Close'} {title} pane")
+        self.pane_area = pane_area
         self.pane_id = pane_id
-        self.old_state = doc.pane_state(pane_id)
-        self.new_state = state
+        self.is_open = is_open
 
     def redo(self) -> None:
-        self.doc.set_pane_state(self.pane_id, self.new_state)
+        self.pane_area.set_pane_open(self.pane_id, self.is_open)
 
     def undo(self) -> None:
-        self.doc.set_pane_state(self.pane_id, self.old_state)
+        self.pane_area.set_pane_open(self.pane_id, not self.is_open)
 
 
 class SetItemFieldCommand(QUndoCommand):

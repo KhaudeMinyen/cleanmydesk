@@ -425,17 +425,23 @@ ways to get them:
                        size. The AI suggestion engine will replace this.
     - Items on desk    Lists every item with its width, depth, height,
                        and where the size came from (measured or AI).
+                       This list is read-only. To change the desk, use
+                       the Item dimensions pane.
     - Item dimensions  Change the desk size, add or remove items, and
                        double-click any cell to change a name or size.
                        Sizes typed here count as manual measurements.
 
-    The − button collapses a pane to its title bar (the Items on desk
-    pane folds into a thin strip at the side). The + button expands it
-    again. When no pane is expanded, an "Add pane" button appears.
+    The - button closes a pane, and it disappears. The + button opens a
+    pane that was closed. When every pane is closed, an "Add pane"
+    button appears in the middle of the window.
+
+    Opening and closing panes only changes how the window looks. It is
+    not saved in the project and never counts as an unsaved change, but
+    it can still be undone.
 
   Sidebar (top to bottom)
     Undo          Undo the last change: a size edit, an added or removed
-                  item, or a pane being collapsed, expanded, or closed.
+                  item, or a pane being opened or closed.
     Redo          Undo the undo.
     New project   Start over. Asks Save / Discard / Cancel if there are
                   unsaved changes.
@@ -448,7 +454,7 @@ ways to get them:
     (gear)        Not assigned yet.
 
   Projects are saved as .cmdesk files. They are plain JSON text files
-  that hold the desk size, the items, and which panes are open.
+  that hold the desk size and the items.
 
 15.2  How to run it
 

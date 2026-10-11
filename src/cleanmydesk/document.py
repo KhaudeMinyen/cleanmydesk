@@ -14,17 +14,12 @@ from PySide6.QtCore import QObject, Signal
 
 from cleanmydesk.model.project import Item, Project
 
-PANE_EXPANDED = "expanded"
-PANE_COLLAPSED = "collapsed"
-PANE_CLOSED = "closed"
-
 
 class ProjectDocument(QObject):
     project_replaced = Signal()
     desk_changed = Signal()
     items_reset = Signal()
     item_changed = Signal(str)  # item id
-    pane_state_changed = Signal(str, str)  # pane id, new state
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -35,15 +30,6 @@ class ProjectDocument(QObject):
         self.project = project
         self.path = path
         self.project_replaced.emit()
-
-    # Panes
-
-    def pane_state(self, pane_id: str) -> str:
-        return self.project.panes.get(pane_id, PANE_EXPANDED)
-
-    def set_pane_state(self, pane_id: str, state: str) -> None:
-        self.project.panes[pane_id] = state
-        self.pane_state_changed.emit(pane_id, state)
 
     # Desk
 

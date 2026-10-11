@@ -11,7 +11,6 @@ def sample_project():
     return Project(
         desk=Desk(100, 50),
         items=[Item("Monitor", 60, 20, 45), Item("Mug", 9, 9, 10, size_source="ai")],
-        panes={"layout": "collapsed", "items": "closed"},
     )
 
 

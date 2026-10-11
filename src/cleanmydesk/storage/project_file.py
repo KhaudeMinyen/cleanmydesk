@@ -10,7 +10,6 @@ from cleanmydesk.model.project import SIZE_SOURCES, Desk, Item, Project
 FILE_EXTENSION = ".cmdesk"
 FILE_FORMAT = "cleanmydesk-project"
 FILE_VERSION = 1
-PANE_STATES = ("expanded", "collapsed", "closed")
 
 
 class ProjectFileError(Exception):
@@ -33,7 +32,6 @@ def project_to_dict(project: Project) -> dict:
             }
             for item in project.items
         ],
-        "panes": dict(project.panes),
     }
 
 
@@ -65,16 +63,11 @@ def project_from_dict(data: dict) -> Project:
                     size_source=source,
                 )
             )
-        panes = {
-            str(pane): state
-            for pane, state in data.get("panes", {}).items()
-            if state in PANE_STATES
-        }
     except ProjectFileError:
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise ProjectFileError(f"The project file is damaged or incomplete ({exc}).") from exc
-    return Project(desk=desk, items=items, panes=panes)
+    return Project(desk=desk, items=items)
 
 
 def save_project(project: Project, path: Path) -> None:

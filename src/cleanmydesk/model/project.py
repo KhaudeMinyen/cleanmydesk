@@ -36,9 +36,6 @@ class Item:
 class Project:
     desk: Desk = field(default_factory=Desk)
     items: list[Item] = field(default_factory=list)
-    # Pane id -> "expanded", "collapsed" or "closed". Saved so a project
-    # reopens with the same layout.
-    panes: dict[str, str] = field(default_factory=dict)
 
     def index_of(self, item_id: str) -> int:
         for row, item in enumerate(self.items):

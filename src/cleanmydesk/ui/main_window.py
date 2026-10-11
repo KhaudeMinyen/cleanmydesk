@@ -17,12 +17,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from cleanmydesk.document import PANE_CLOSED, PANE_EXPANDED, ProjectDocument
+from cleanmydesk.document import ProjectDocument
 from cleanmydesk.model.project import Project
 from cleanmydesk.storage.project_file import (
     FILE_EXTENSION,
     ProjectFileError,
     load_project,
+    project_to_dict,
     save_project,
 )
 from cleanmydesk.ui.desk_view import DeskLayoutView
@@ -43,23 +44,27 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.doc = ProjectDocument(self)
         self.undo_stack = QUndoStack(self)
-        self.undo_stack.cleanChanged.connect(self._on_clean_changed)
+        # A copy of the project as it was last saved (or opened). The project
+        # has unsaved changes whenever it differs from this copy, so undoing
+        # back to the saved state clears the "unsaved" mark again.
+        self._saved_copy = project_to_dict(self.doc.project)
+        for signal in (self.doc.project_replaced, self.doc.desk_changed, self.doc.items_reset):
+            signal.connect(self._update_modified)
+        self.doc.item_changed.connect(self._update_modified)
 
         self.dimensions_editor = DimensionsEditor(self.doc, self.undo_stack)
         self.dimensions_editor.message.connect(self._show_message)
         self.pane_area = PaneArea(
-            self.doc,
             self.undo_stack,
             layout_pane=Pane("layout", "Desk layout", DeskLayoutView(self.doc)),
             dimensions_pane=Pane("dimensions", "Item dimensions", self.dimensions_editor),
-            items_pane=Pane("items", "Items on desk", ItemsListView(self.doc), collapse_to="side"),
+            items_pane=Pane("items", "Items on desk", ItemsListView(self.doc)),
         )
-        self.pane_area.add_pane_clicked.connect(self._show_add_pane_menu_at_button)
+        self.pane_area.add_pane_clicked.connect(self._show_add_pane_menu_under)
         self.setCentralWidget(self.pane_area)
 
         self._build_sidebar()
-        self.doc.pane_state_changed.connect(self._update_pane_actions)
-        self.doc.project_replaced.connect(self._update_pane_actions)
+        self.pane_area.panes_changed.connect(self._update_pane_actions)
         self._update_pane_actions()
 
         self.statusBar()
@@ -137,28 +142,22 @@ class MainWindow(QMainWindow):
 
     def _fill_add_pane_menu(self) -> None:
         self.add_pane_menu.clear()
-        for pane in self.pane_area.panes_not_expanded():
-            note = "closed" if pane.state == PANE_CLOSED else "collapsed"
-            action = self.add_pane_menu.addAction(f"{pane.title} ({note})")
-            action.triggered.connect(
-                lambda _checked=False, p=pane: self.pane_area.request_state(p.pane_id, PANE_EXPANDED)
-            )
+        for pane in self.pane_area.closed_panes():
+            action = self.add_pane_menu.addAction(pane.title)
+            action.triggered.connect(lambda _checked=False, p=pane: self.pane_area.request_open(p.pane_id, True))
 
     def _fill_close_pane_menu(self) -> None:
         self.close_pane_menu.clear()
-        for pane in self.pane_area.panes_open():
+        for pane in self.pane_area.open_panes():
             action = self.close_pane_menu.addAction(pane.title)
-            action.triggered.connect(
-                lambda _checked=False, p=pane: self.pane_area.request_state(p.pane_id, PANE_CLOSED)
-            )
+            action.triggered.connect(lambda _checked=False, p=pane: self.pane_area.request_open(p.pane_id, False))
 
-    def _show_add_pane_menu_at_button(self) -> None:
-        button = self.pane_area.add_pane_button
+    def _show_add_pane_menu_under(self, button: QWidget) -> None:
         self.add_pane_menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
-    def _update_pane_actions(self, *_args) -> None:
-        self.add_pane_action.setEnabled(bool(self.pane_area.panes_not_expanded()))
-        self.close_pane_action.setEnabled(bool(self.pane_area.panes_open()))
+    def _update_pane_actions(self) -> None:
+        self.add_pane_action.setEnabled(bool(self.pane_area.closed_panes()))
+        self.close_pane_action.setEnabled(bool(self.pane_area.open_panes()))
 
     # Files
 
@@ -203,7 +202,7 @@ class MainWindow(QMainWindow):
 
     def maybe_save(self) -> bool:
         """Return True if it is OK to replace the current project."""
-        if self.undo_stack.isClean():
+        if not self.is_modified():
             return True
         answer = self._ask_save_changes()
         if answer == SAVE:
@@ -217,9 +216,9 @@ class MainWindow(QMainWindow):
             event.ignore()
 
     def _load(self, project: Project, path: Path | None) -> None:
+        self._saved_copy = project_to_dict(project)
         self.doc.replace_project(project, path)
         self.undo_stack.clear()
-        self.undo_stack.setClean()
         self._update_title()
 
     def _write(self, path: Path) -> bool:
@@ -229,13 +228,17 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not save project", f"{path.name} could not be saved.\n\n{exc}")
             return False
         self.doc.path = path
-        self.undo_stack.setClean()
+        self._saved_copy = project_to_dict(self.doc.project)
         self._update_title()
         self.statusBar().showMessage(f"Saved {path.name}.", 4000)
         return True
 
-    def _on_clean_changed(self, clean: bool) -> None:
-        self.setWindowModified(not clean)
+    def is_modified(self) -> bool:
+        """True if the desk or items changed since the last save."""
+        return project_to_dict(self.doc.project) != self._saved_copy
+
+    def _update_modified(self, *_args) -> None:
+        self.setWindowModified(self.is_modified())
 
     def _show_message(self, text: str) -> None:
         self.statusBar().showMessage(text, 6000)
@@ -243,7 +246,7 @@ class MainWindow(QMainWindow):
     def _update_title(self) -> None:
         name = self.doc.path.name if self.doc.path else "Untitled"
         self.setWindowTitle(f"{name}[*] - CleanMyDesk")
-        self.setWindowModified(not self.undo_stack.isClean())
+        self._update_modified()
 
     # Dialogs, kept in small methods so tests can replace them.
 

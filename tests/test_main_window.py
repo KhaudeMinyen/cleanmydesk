@@ -12,7 +12,7 @@ def window(qapp):
     w = MainWindow()
     w.show()
     yield w
-    w.undo_stack.setClean()  # skip the save prompt when the window closes
+    w._ask_save_changes = lambda: DISCARD  # skip the save prompt when the window closes
     w.close()
     w.deleteLater()
 
@@ -23,22 +23,24 @@ def add_item(window, name="Mug", size_source="manual"):
     return item
 
 
-def test_collapsing_every_pane_shows_add_pane_button(window):
+def test_closing_every_pane_shows_add_pane_button(window):
     area = window.pane_area
     assert area.empty_state.isHidden()
     for pane_id in ("layout", "dimensions", "items"):
-        area.request_state(pane_id, "collapsed")
+        area.panes[pane_id].close_button.click()
     assert not area.empty_state.isHidden()
-    assert area.panes["layout"].isVisible()  # title bar still showing
+    assert not area.main_splitter.isVisible()
+    assert not window.close_pane_action.isEnabled()
+    assert window.add_pane_action.isEnabled()
 
     window.undo_action.trigger()
-    assert area.panes["items"].state == "expanded"
+    assert area.panes["items"].isVisible()
     assert area.empty_state.isHidden()
 
 
 def test_close_pane_and_undo_redo(window):
     area = window.pane_area
-    area.request_state("items", "closed")
+    area.request_open("items", False)
     assert not area.panes["items"].isVisible()
     window.undo_action.trigger()
     assert area.panes["items"].isVisible()
@@ -46,12 +48,30 @@ def test_close_pane_and_undo_redo(window):
     assert not area.panes["items"].isVisible()
 
 
-def test_closing_every_pane_disables_close_button(window):
-    for pane_id in ("layout", "dimensions", "items"):
-        window.pane_area.request_state(pane_id, "closed")
-    assert not window.close_pane_action.isEnabled()
-    assert window.add_pane_action.isEnabled()
-    assert not window.pane_area.empty_state.isHidden()
+def test_plus_button_is_disabled_while_every_pane_is_open(window):
+    area = window.pane_area
+    assert not area.panes["layout"].add_button.isEnabled()
+    area.request_open("items", False)
+    assert area.panes["layout"].add_button.isEnabled()
+    area.request_open("items", True)
+    assert not area.panes["layout"].add_button.isEnabled()
+
+
+def test_closing_panes_is_not_an_unsaved_change(window, monkeypatch):
+    window.pane_area.request_open("layout", False)
+    window.pane_area.request_open("items", False)
+    assert not window.is_modified()
+    assert not window.isWindowModified()
+    monkeypatch.setattr(window, "_ask_save_changes", lambda: pytest.fail("should not ask to save"))
+    assert window.new_project()
+
+
+def test_undoing_back_to_the_saved_state_clears_unsaved_mark(window):
+    add_item(window)
+    assert window.isWindowModified()
+    window.undo_action.trigger()
+    assert not window.is_modified()
+    assert not window.isWindowModified()
 
 
 def test_editing_a_size_is_undoable_and_marks_it_measured(window):
@@ -90,7 +110,7 @@ def test_first_save_asks_for_a_file_then_saves_in_place(window, tmp_path, monkey
     assert window.save()
     path = tmp_path / "my desk.cmdesk"
     assert load_project(path).items[0].name == "Mug"
-    assert window.undo_stack.isClean()
+    assert not window.is_modified()
 
     add_item(window, "Lamp")
     assert window.save()
@@ -119,7 +139,6 @@ def test_unsaved_changes_save_then_open(window, tmp_path, monkeypatch):
     other = MainWindow()
     other.doc.project.items.append(Item("Plant", 20, 20, 30))
     other._write(tmp_path / "other.cmdesk")
-    other.undo_stack.setClean()
     other.deleteLater()
 
     add_item(window)
@@ -138,17 +157,6 @@ def test_cancelling_the_save_dialog_cancels_new_project(window, monkeypatch):
     monkeypatch.setattr(window, "_choose_save_path", lambda: None)
     assert not window.new_project()
     assert len(window.doc.project.items) == 1
-
-
-def test_pane_layout_is_saved_with_the_project(window, tmp_path, monkeypatch):
-    window.pane_area.request_state("items", "closed")
-    monkeypatch.setattr(window, "_choose_save_path", lambda: tmp_path / "p.cmdesk")
-    window.save()
-    monkeypatch.setattr(window, "_ask_save_changes", lambda: DISCARD)
-    window.new_project()
-    assert window.pane_area.panes["items"].state == "expanded"
-    assert window.open_path(tmp_path / "p.cmdesk")
-    assert window.pane_area.panes["items"].state == "closed"
 
 
 def test_remove_several_items_is_one_undo_step(window):
