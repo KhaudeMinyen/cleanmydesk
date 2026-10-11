@@ -76,20 +76,16 @@ class PaneArea(QWidget):
         layout.addWidget(self.empty_state)
 
         for pane in self.panes.values():
-            pane.add_clicked.connect(self.add_pane_clicked)
             pane.close_clicked.connect(lambda p=pane: self.request_open(p.pane_id, False))
         self._update_layout()
 
     def is_open(self, pane_id: str) -> bool:
         return self._open[pane_id]
 
-    def open_panes(self) -> list[Pane]:
-        return [p for p in self.panes.values() if self._open[p.pane_id]]
-
     def closed_panes(self) -> list[Pane]:
         return [p for p in self.panes.values() if not self._open[p.pane_id]]
 
-    # Called by the − buttons and by the sidebar menus.
+    # Called by the − buttons and by the sidebar menu.
     def request_open(self, pane_id: str, is_open: bool) -> None:
         if self._open[pane_id] != is_open:
             self.undo_stack.push(SetPaneOpenCommand(self, pane_id, is_open))
@@ -107,5 +103,3 @@ class PaneArea(QWidget):
         self.left_splitter.setVisible(left_open)
         self.main_splitter.setVisible(any_open)
         self.empty_state.setVisible(not any_open)
-        for pane in self.panes.values():
-            pane.add_button.setEnabled(not all(self._open.values()))

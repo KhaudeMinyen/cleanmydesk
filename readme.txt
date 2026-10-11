@@ -408,13 +408,13 @@ ways to get them:
   The main window looks like this:
 
     +------+-------------------------------+---------------+
-    | Undo | Desk layout             + -   | Items on  + - |
+    | Undo | Desk layout               -   | Items on    - |
     | Redo |   (top-down desk drawing)     | desk          |
     | New  |                               |  (list with   |
     | Save +-------------------------------+  sizes)       |
-    | Open | Item dimensions         + -   |               |
+    | Open | Item dimensions           -   |               |
     | +Pane|   desk size, item table,      |               |
-    | xPane|   Add item / Remove item      |               |
+    | AI   |   Add item / Remove item      |               |
     |      |                               |               |
     | Gear |                               |               |
     +------+-------------------------------+---------------+
@@ -431,9 +431,10 @@ ways to get them:
                        double-click any cell to change a name or size.
                        Sizes typed here count as manual measurements.
 
-    The - button closes a pane, and it disappears. The + button opens a
-    pane that was closed. When every pane is closed, an "Add pane"
-    button appears in the middle of the window.
+    The - button on a pane closes it, and it disappears. To bring a
+    closed pane back, use the "Open a pane" button on the sidebar. When
+    every pane is closed, an "Add pane" button also appears in the
+    middle of the window.
 
     Opening and closing panes only changes how the window looks. It is
     not saved in the project and never counts as an unsaved change, but
@@ -449,8 +450,10 @@ ways to get them:
                   save it (Ctrl+Shift+S always asks).
     Open          Open a saved project. Asks Save / Discard / Cancel if
                   there are unsaved changes.
-    Open a pane   Pick a collapsed or closed pane to bring back.
-    Close a pane  Pick a pane to close.
+    Open a pane   Pick a closed pane to bring back.
+    Ask AI        Will ask an AI to explain the arrangement, give general
+                  tips, and suggest changes to the desk. Not connected
+                  yet, so the button is greyed out.
     (gear)        Not assigned yet.
 
   Projects are saved as .cmdesk files. They are plain JSON text files

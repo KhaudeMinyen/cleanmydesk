@@ -30,7 +30,6 @@ def test_closing_every_pane_shows_add_pane_button(window):
         area.panes[pane_id].close_button.click()
     assert not area.empty_state.isHidden()
     assert not area.main_splitter.isVisible()
-    assert not window.close_pane_action.isEnabled()
     assert window.add_pane_action.isEnabled()
 
     window.undo_action.trigger()
@@ -48,13 +47,30 @@ def test_close_pane_and_undo_redo(window):
     assert not area.panes["items"].isVisible()
 
 
-def test_plus_button_is_disabled_while_every_pane_is_open(window):
+def test_panes_have_only_a_close_button(window):
+    pane = window.pane_area.panes["layout"]
+    assert not hasattr(pane, "add_button")
+    assert pane.close_button.isEnabled()
+
+
+def test_sidebar_opens_closed_panes(window):
     area = window.pane_area
-    assert not area.panes["layout"].add_button.isEnabled()
+    assert not window.add_pane_action.isEnabled()
     area.request_open("items", False)
-    assert area.panes["layout"].add_button.isEnabled()
-    area.request_open("items", True)
-    assert not area.panes["layout"].add_button.isEnabled()
+    assert window.add_pane_action.isEnabled()
+    window._fill_add_pane_menu()
+    [action] = window.add_pane_menu.actions()
+    assert action.text() == "Items on desk"
+    action.trigger()
+    assert area.panes["items"].isVisible()
+    assert not window.add_pane_action.isEnabled()
+
+
+def test_ai_button_is_in_the_sidebar_but_not_connected(window):
+    actions = window.sidebar.actions()
+    assert actions.index(window.ai_action) == actions.index(window.add_pane_action) + 1
+    assert not window.ai_action.isEnabled()
+    assert not hasattr(window, "close_pane_action")
 
 
 def test_closing_panes_is_not_an_unsaved_change(window, monkeypatch):
