@@ -27,12 +27,14 @@ from cleanmydesk.storage.project_file import (
     save_project,
 )
 from cleanmydesk.ui.ai_chat import AIChatDialog
-from cleanmydesk.ui.desk_view import DeskLayoutView
+from cleanmydesk.ui.desk_view import DeskLayoutPanel
 from cleanmydesk.ui.dimensions_editor import DimensionsEditor
 from cleanmydesk.ui.icons import icon
 from cleanmydesk.ui.items_list import ItemsListView
 from cleanmydesk.ui.pane import Pane
 from cleanmydesk.ui.pane_area import PaneArea
+from cleanmydesk.ui.profile_editor import ProfileEditor
+from cleanmydesk.ui.suggestions import LayoutSuggestions
 
 FILE_FILTER = f"CleanMyDesk project (*{FILE_EXTENSION})"
 
@@ -49,17 +51,23 @@ class MainWindow(QMainWindow):
         # has unsaved changes whenever it differs from this copy, so undoing
         # back to the saved state clears the "unsaved" mark again.
         self._saved_copy = project_to_dict(self.doc.project)
-        for signal in (self.doc.project_replaced, self.doc.desk_changed, self.doc.items_reset):
+        for signal in (self.doc.project_replaced, self.doc.desk_changed, self.doc.items_reset, self.doc.profile_changed):
             signal.connect(self._update_modified)
         self.doc.item_changed.connect(self._update_modified)
 
         self.dimensions_editor = DimensionsEditor(self.doc, self.undo_stack)
         self.dimensions_editor.message.connect(self._show_message)
+        self.suggestions = LayoutSuggestions(self.doc, self)
         self.pane_area = PaneArea(
             self.undo_stack,
-            layout_pane=Pane("layout", "Desk layout", DeskLayoutView(self.doc)),
-            dimensions_pane=Pane("dimensions", "Item dimensions", self.dimensions_editor),
-            items_pane=Pane("items", "Items on desk", ItemsListView(self.doc)),
+            left=[
+                Pane("layout", "Desk layout", DeskLayoutPanel(self.doc, self.suggestions)),
+                Pane("dimensions", "Item dimensions", self.dimensions_editor),
+            ],
+            right=[
+                Pane("items", "Items on desk", ItemsListView(self.doc)),
+                Pane("profile", "Work profile", ProfileEditor(self.doc, self.undo_stack)),
+            ],
         )
         self.pane_area.add_pane_clicked.connect(self._show_add_pane_menu_under)
         self.setCentralWidget(self.pane_area)

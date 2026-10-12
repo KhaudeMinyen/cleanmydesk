@@ -1,29 +1,44 @@
-"""Top-down drawing of the desk for the Desk layout pane."""
+"""The Desk layout pane: the suggested layout, drawn from above, and why."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPalette, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QToolTip, QVBoxLayout, QWidget
 
 from cleanmydesk.document import ProjectDocument
-from cleanmydesk.layout_preview import arrange_items
+from cleanmydesk.engine.layout import ARM_REACH_CM, EASY_REACH_CM
+from cleanmydesk.ui.suggestions import LayoutSuggestions
 
 MARGIN = 16
-NOTE = "Preview: AI suggestions are not built yet, so items are lined up by size."
+NOTE = "Suggested layout. You sit at the bottom edge. Hover over an item to see why it is there."
 
 
 class DeskLayoutView(QWidget):
-    def __init__(self, doc: ProjectDocument, parent: QWidget | None = None) -> None:
+    def __init__(self, doc: ProjectDocument, suggestions: LayoutSuggestions, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.doc = doc
+        self.suggestions = suggestions
         self.setMinimumSize(200, 140)
-        for signal in (doc.project_replaced, doc.desk_changed, doc.items_reset):
-            signal.connect(self.update)
-        doc.item_changed.connect(lambda _item_id: self.update())
+        self.setMouseTracking(True)
+        self._item_rects: list[tuple[QRectF, str]] = []  # (rect on screen, item id), for tooltips
+        suggestions.changed.connect(self.update)
 
     def sizeHint(self) -> QSize:
-        return QSize(560, 360)
+        return QSize(560, 320)
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Type.ToolTip:
+            for rect, item_id in self._item_rects:
+                if rect.contains(QPointF(event.pos())):
+                    item = self.doc.project.item(item_id)
+                    reason = self.suggestions.result.reasons.get(item_id, "")
+                    QToolTip.showText(event.globalPos(), f"<b>{item.name}</b><br>{reason}", self)
+                    return True
+            QToolTip.hideText()
+            event.ignore()
+            return True
+        return super().event(event)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -36,16 +51,16 @@ class DeskLayoutView(QWidget):
         line = metrics.height()
 
         desk = self.doc.project.desk
-        placements, unplaced = arrange_items(desk, self.doc.project.items)
+        result = self.suggestions.result
+        self._item_rects = []
 
-        # Notes above and below the desk drawing.
         painter.setPen(muted)
         top_note = metrics.elidedText(NOTE, Qt.TextElideMode.ElideRight, self.width() - 2 * MARGIN)
         painter.drawText(MARGIN, MARGIN + metrics.ascent(), top_note)
-        bottom_lines = [f"Desk: {desk.width_cm:g} × {desk.depth_cm:g} cm. You sit at the bottom edge."]
-        if unplaced:
-            names = ", ".join(item.name for item in unplaced)
-            bottom_lines.append(f"Does not fit: {names}")
+        bottom_lines = [f"Desk: {desk.width_cm:g} × {desk.depth_cm:g} cm."]
+        if result.off_desk:
+            names = ", ".join(item.name for item in result.off_desk)
+            bottom_lines.append(f"Put away (no room on the desk): {names}")
 
         area = QRectF(
             MARGIN,
@@ -63,16 +78,31 @@ class DeskLayoutView(QWidget):
         painter.setBrush(palette.color(QPalette.ColorRole.Base))
         painter.drawRoundedRect(desk_rect, 4, 4)
 
+        # Reach zones (readme section 3.3), centered where the user sits.
+        seat = QPointF(desk_rect.center().x(), desk_rect.bottom())
+        painter.save()
+        painter.setClipRect(desk_rect)
+        zone_color = QColor(accent)
+        for radius_cm, alpha in ((ARM_REACH_CM, 14), (EASY_REACH_CM, 22)):
+            zone_color.setAlpha(alpha)
+            painter.setBrush(zone_color)
+            radius = radius_cm * scale
+            path = QPainterPath()
+            path.addEllipse(seat, radius, radius)
+            painter.drawPath(path)
+        painter.restore()
+
         names = {item.id: item.name for item in self.doc.project.items}
         fill = QColor(accent)
-        fill.setAlpha(50)
-        for placement in placements:
+        fill.setAlpha(60)
+        for placement in result.placements:
             rect = QRectF(
                 desk_rect.left() + placement.x_cm * scale,
                 desk_rect.top() + placement.y_cm * scale,
                 placement.width_cm * scale,
                 placement.depth_cm * scale,
             )
+            self._item_rects.append((rect, placement.item_id))
             painter.setPen(QPen(accent, 1.5))
             painter.setBrush(fill)
             painter.drawRect(rect)
@@ -93,3 +123,41 @@ class DeskLayoutView(QWidget):
             painter.drawText(QRectF(MARGIN, y - metrics.ascent(), self.width() - 2 * MARGIN, line),
                              Qt.AlignmentFlag.AlignHCenter, text)
             y += line
+
+
+class DeskLayoutPanel(QWidget):
+    """The drawing, with the reason for every item listed underneath."""
+
+    def __init__(self, doc: ProjectDocument, suggestions: LayoutSuggestions, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.doc = doc
+        self.suggestions = suggestions
+        self.view = DeskLayoutView(doc, suggestions)
+        self.reasons = QListWidget()
+        self.reasons.setWordWrap(True)
+        self.reasons.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.reasons.setMaximumHeight(130)
+        heading = QLabel("Why things are here")
+        font = heading.font()
+        font.setBold(True)
+        heading.setFont(font)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 4)
+        layout.addWidget(self.view, 1)
+        layout.addWidget(heading)
+        layout.addWidget(self.reasons)
+        self._heading = heading
+        suggestions.changed.connect(self.refresh)
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.reasons.clear()
+        result = self.suggestions.result
+        for item in self.doc.project.items:
+            reason = result.reasons.get(item.id)
+            if reason:
+                QListWidgetItem(f"{item.name}: {reason}", self.reasons)
+        has_items = bool(self.doc.project.items)
+        self._heading.setVisible(has_items)
+        self.reasons.setVisible(has_items)
