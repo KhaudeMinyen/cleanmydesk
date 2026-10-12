@@ -66,10 +66,10 @@ def test_sidebar_opens_closed_panes(window):
     assert not window.add_pane_action.isEnabled()
 
 
-def test_ai_button_is_in_the_sidebar_but_not_connected(window):
+def test_ai_button_is_in_the_sidebar_below_open_a_pane(window):
     actions = window.sidebar.actions()
     assert actions.index(window.ai_action) == actions.index(window.add_pane_action) + 1
-    assert not window.ai_action.isEnabled()
+    assert window.ai_action.isEnabled()
     assert not hasattr(window, "close_pane_action")
 
 
@@ -184,3 +184,12 @@ def test_remove_several_items_is_one_undo_step(window):
     assert window.doc.project.items == []
     window.undo_action.trigger()
     assert [i.name for i in window.doc.project.items] == ["A", "B", "C"]
+
+
+def test_ai_button_opens_the_chat_window(window):
+    window.ai_action.trigger()
+    dialog = window.ai_dialog
+    assert dialog is not None and dialog.isVisible()
+    window.ai_action.trigger()
+    assert window.ai_dialog is dialog  # the same window is reused
+    dialog.close()

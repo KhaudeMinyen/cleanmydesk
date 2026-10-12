@@ -4,8 +4,9 @@
 =====================================================================
 
 Project type : Artificial Intelligence merit badge project (design phase)
-Status       : The main window (panes, sidebar, save/open, undo/redo) is
-               built. The AI parts are not built yet. See section 15.
+Status       : The main window (panes, sidebar, save/open, undo/redo) and
+               the AI chat assistant are built. The layout suggestion
+               engine and camera are not built yet. See section 15.
 Platforms    : Windows, macOS, and Linux (one codebase)
 Repository   : khaudeminyen/cleanmydesk
 
@@ -273,6 +274,7 @@ ways to get them:
         model/          desk, item, and profile classes
         vision/         camera capture, marker detection, object detection
         engine/         scoring, layout search, explanations
+        ai/             the AI chat assistant (talks to Ollama)
         learning/       feedback storage and weight updates
         storage/        SQLite access
     tests/              unit tests for the scoring and search code
@@ -451,9 +453,7 @@ ways to get them:
     Open          Open a saved project. Asks Save / Discard / Cancel if
                   there are unsaved changes.
     Open a pane   Pick a closed pane to bring back.
-    Ask AI        Will ask an AI to explain the arrangement, give general
-                  tips, and suggest changes to the desk. Not connected
-                  yet, so the button is greyed out.
+    Ask AI        Opens the AI chat window (see 15.3).
     (gear)        Not assigned yet.
 
   Projects are saved as .cmdesk files. They are plain JSON text files
@@ -473,10 +473,44 @@ ways to get them:
 
     python -m pytest
 
-15.3  What comes next
+15.3  The AI assistant (Ask AI)
 
-  The AI parts: the layout suggestion engine (section 5), the camera
-  and object recognition (section 6), and learning from feedback.
+  The Ask AI button opens a chat window. The AI can explain the current
+  arrangement, suggest changes, give general tips, or answer any
+  question you type. Each question is sent together with the desk size
+  and every item's size and position, as they are at that moment.
+
+  The AI runs on your own computer with Ollama, a free program for
+  running AI models. Nothing is sent over the internet, and there is no
+  account, key, or cost.
+
+  Setting up Ollama on Linux (one time):
+
+    curl -fsSL https://ollama.com/install.sh | sh
+    ollama pull llama3.1:8b
+
+  Ollama also runs on Windows and macOS; download it from
+  https://ollama.com. To check that a model works, chat with it in a
+  terminal with `ollama run llama3.1:8b` (type /bye to quit).
+
+  Choosing a model: an 8-billion-parameter model such as llama3.1:8b
+  or qwen2.5:7b needs about 5 GB of graphics card memory and answers
+  quickly on a card like a GTX 1080 Ti (11 GB). Bigger models give
+  better answers but are slower. Any model you download shows up in
+  the Model list of the chat window, and the app remembers your choice.
+
+  If answers are very slow, Ollama may be using the processor instead
+  of the graphics card. While a model is answering, run `ollama ps`:
+  the PROCESSOR column should say GPU.
+
+  If the chat window says it could not reach Ollama, Ollama is not
+  running. Start it with `ollama serve` (the Linux installer normally
+  starts it automatically), then press Refresh.
+
+15.4  What comes next
+
+  The layout suggestion engine (section 5), the camera and object
+  recognition (section 6), and learning from feedback.
 
 =====================================================================
   End of readme.txt

@@ -13,6 +13,7 @@ from cleanmydesk.ui.main_window import MainWindow
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
     app = QApplication(argv)
+    app.setOrganizationName("CleanMyDesk")
     app.setApplicationName("CleanMyDesk")
     window = MainWindow()
     # A project file can be passed on the command line to open it.
