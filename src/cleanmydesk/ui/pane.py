@@ -1,4 +1,6 @@
-"""A pane with a title bar. − closes the pane, + opens a closed one."""
+"""A pane with a title bar and a − button that closes it.
+
+Closed panes are opened again from the sidebar."""
 
 from __future__ import annotations
 
@@ -29,11 +31,10 @@ def _small_button(text: str, tooltip: str) -> QToolButton:
 class Pane(QFrame):
     """One of the main window's panes.
 
-    The +/− buttons only emit signals. The pane area turns those into
-    undoable commands.
+    The − button only emits a signal. The pane area turns it into an
+    undoable command.
     """
 
-    add_clicked = Signal(QWidget)  # the + button, so a menu can open under it
     close_clicked = Signal()
 
     def __init__(self, pane_id: str, title: str, content: QWidget, parent: QWidget | None = None) -> None:
@@ -45,7 +46,7 @@ class Pane(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setObjectName(f"pane_{pane_id}")
 
-        # Title bar: "Title ............ + −"
+        # Title bar: "Title .............. −"
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(8, 2, 2, 2)
@@ -55,9 +56,7 @@ class Pane(QFrame):
         title_label.setFont(font)
         header_layout.addWidget(title_label)
         header_layout.addStretch(1)
-        self.add_button = _small_button("+", "Open a closed pane")
         self.close_button = _small_button("−", f"Close {title}")
-        header_layout.addWidget(self.add_button)
         header_layout.addWidget(self.close_button)
 
         layout = QVBoxLayout(self)
@@ -66,5 +65,4 @@ class Pane(QFrame):
         layout.addWidget(header)
         layout.addWidget(content, 1)
 
-        self.add_button.clicked.connect(lambda: self.add_clicked.emit(self.add_button))
         self.close_button.clicked.connect(self.close_clicked)

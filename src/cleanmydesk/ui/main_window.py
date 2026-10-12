@@ -111,10 +111,10 @@ class MainWindow(QMainWindow):
         self.add_pane_action = QAction(icon("add_pane"), "Open a pane", self)
         self.add_pane_action.setMenu(self.add_pane_menu)
 
-        self.close_pane_menu = QMenu(self)
-        self.close_pane_menu.aboutToShow.connect(self._fill_close_pane_menu)
-        self.close_pane_action = QAction(icon("close_pane"), "Close a pane", self)
-        self.close_pane_action.setMenu(self.close_pane_menu)
+        # Will ask an AI to explain the arrangement, give general tips, and
+        # suggest changes. Not connected to anything yet.
+        self.ai_action = QAction(icon("ai"), "Ask AI about this desk (coming soon)", self)
+        self.ai_action.setEnabled(False)
 
         # Placeholder for a future feature; it does nothing yet.
         self.spare_action = QAction(icon("gear"), "Not assigned yet", self)
@@ -127,13 +127,12 @@ class MainWindow(QMainWindow):
             self.save_action,
             self.open_action,
             self.add_pane_action,
-            self.close_pane_action,
+            self.ai_action,
         ):
             bar.addAction(action)
-        for action in (self.add_pane_action, self.close_pane_action):
-            button = bar.widgetForAction(action)
-            if isinstance(button, QToolButton):
-                button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button = bar.widgetForAction(self.add_pane_action)
+        if isinstance(button, QToolButton):
+            button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
@@ -146,18 +145,11 @@ class MainWindow(QMainWindow):
             action = self.add_pane_menu.addAction(pane.title)
             action.triggered.connect(lambda _checked=False, p=pane: self.pane_area.request_open(p.pane_id, True))
 
-    def _fill_close_pane_menu(self) -> None:
-        self.close_pane_menu.clear()
-        for pane in self.pane_area.open_panes():
-            action = self.close_pane_menu.addAction(pane.title)
-            action.triggered.connect(lambda _checked=False, p=pane: self.pane_area.request_open(p.pane_id, False))
-
     def _show_add_pane_menu_under(self, button: QWidget) -> None:
         self.add_pane_menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
     def _update_pane_actions(self) -> None:
         self.add_pane_action.setEnabled(bool(self.pane_area.closed_panes()))
-        self.close_pane_action.setEnabled(bool(self.pane_area.open_panes()))
 
     # Files
 
