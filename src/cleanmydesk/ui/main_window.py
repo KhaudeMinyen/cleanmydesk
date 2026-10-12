@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSettings, QSize, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QUndoStack
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -26,6 +26,7 @@ from cleanmydesk.storage.project_file import (
     project_to_dict,
     save_project,
 )
+from cleanmydesk.ui.ai_chat import AIChatDialog
 from cleanmydesk.ui.desk_view import DeskLayoutView
 from cleanmydesk.ui.dimensions_editor import DimensionsEditor
 from cleanmydesk.ui.icons import icon
@@ -111,10 +112,9 @@ class MainWindow(QMainWindow):
         self.add_pane_action = QAction(icon("add_pane"), "Open a pane", self)
         self.add_pane_action.setMenu(self.add_pane_menu)
 
-        # Will ask an AI to explain the arrangement, give general tips, and
-        # suggest changes. Not connected to anything yet.
-        self.ai_action = QAction(icon("ai"), "Ask AI about this desk (coming soon)", self)
-        self.ai_action.setEnabled(False)
+        self.ai_action = QAction(icon("ai"), "Ask AI about this desk", self)
+        self.ai_action.triggered.connect(self.show_ai_chat)
+        self.ai_dialog: AIChatDialog | None = None
 
         # Placeholder for a future feature; it does nothing yet.
         self.spare_action = QAction(icon("gear"), "Not assigned yet", self)
@@ -144,6 +144,13 @@ class MainWindow(QMainWindow):
         for pane in self.pane_area.closed_panes():
             action = self.add_pane_menu.addAction(pane.title)
             action.triggered.connect(lambda _checked=False, p=pane: self.pane_area.request_open(p.pane_id, True))
+
+    def show_ai_chat(self) -> None:
+        if self.ai_dialog is None:
+            self.ai_dialog = AIChatDialog(self.doc, QSettings(), parent=self)
+        self.ai_dialog.show()
+        self.ai_dialog.raise_()
+        self.ai_dialog.activateWindow()
 
     def _show_add_pane_menu_under(self, button: QWidget) -> None:
         self.add_pane_menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
