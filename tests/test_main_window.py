@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from cleanmydesk.commands import AddItemCommand
 from cleanmydesk.model.project import Item
 from cleanmydesk.storage.project_file import load_project
+from cleanmydesk.ui.dimensions_editor import COLUMN_OF
 from cleanmydesk.ui.main_window import CANCEL, DISCARD, SAVE, MainWindow
 
 
@@ -26,14 +27,14 @@ def add_item(window, name="Mug", size_source="manual"):
 def test_closing_every_pane_shows_add_pane_button(window):
     area = window.pane_area
     assert area.empty_state.isHidden()
-    for pane_id in ("layout", "dimensions", "items"):
-        area.panes[pane_id].close_button.click()
+    for pane in area.panes.values():
+        pane.close_button.click()
     assert not area.empty_state.isHidden()
     assert not area.main_splitter.isVisible()
     assert window.add_pane_action.isEnabled()
 
-    window.undo_action.trigger()
-    assert area.panes["items"].isVisible()
+    window.undo_action.trigger()  # reopens the last pane closed
+    assert area.panes["profile"].isVisible()
     assert area.empty_state.isHidden()
 
 
@@ -93,7 +94,7 @@ def test_undoing_back_to_the_saved_state_clears_unsaved_mark(window):
 def test_editing_a_size_is_undoable_and_marks_it_measured(window):
     item = add_item(window, size_source="ai")
     model = window.dimensions_editor.model
-    width_index = model.index(0, 1)
+    width_index = model.index(0, COLUMN_OF["width_cm"])
 
     assert model.setData(width_index, 12.0, Qt.ItemDataRole.EditRole)
     assert item.width_cm == 12.0
@@ -109,7 +110,7 @@ def test_invalid_size_is_rejected_with_a_message(window):
     messages = []
     window.dimensions_editor.model.message.connect(messages.append)
     count = window.undo_stack.count()
-    assert not window.dimensions_editor.model.setData(window.dimensions_editor.model.index(0, 1), 500.0)
+    assert not window.dimensions_editor.model.setData(window.dimensions_editor.model.index(0, COLUMN_OF["width_cm"]), 500.0)
     assert window.undo_stack.count() == count
     assert "larger than" in messages[0]
 
@@ -193,3 +194,55 @@ def test_ai_button_opens_the_chat_window(window):
     window.ai_action.trigger()
     assert window.ai_dialog is dialog  # the same window is reused
     dialog.close()
+
+
+def test_work_profile_change_is_undoable_and_unsaved(window):
+    editor = window.pane_area.panes["profile"].content
+    editor.task_boxes["writing"].setChecked(True)
+    assert "writing" in window.doc.project.profile.tasks
+    assert window.is_modified()
+    editor.handedness.setCurrentIndex(editor.handedness.findData("left"))
+    editor.handedness.activated.emit(editor.handedness.currentIndex())
+    assert window.doc.project.profile.handedness == "left"
+    window.undo_action.trigger()
+    assert window.doc.project.profile.handedness == "right"
+    assert editor.handedness.currentData() == "right"
+    window.undo_action.trigger()
+    assert "writing" not in window.doc.project.profile.tasks
+    assert not editor.task_boxes["writing"].isChecked()
+
+
+def test_type_and_use_columns_change_the_suggested_layout(window):
+    item = add_item(window, "Thing")
+    model = window.dimensions_editor.model
+    before = window.suggestions.result.reasons[item.id]
+    assert model.setData(model.index(0, COLUMN_OF["usage"]), "rarely")
+    assert item.usage == "rarely"
+    assert model.data(model.index(0, COLUMN_OF["usage"])) == "Rarely"
+    assert not model.setData(model.index(0, COLUMN_OF["kind"]), "spaceship")
+    assert model.setData(model.index(0, COLUMN_OF["kind"]), "drink")
+    assert window.suggestions.result.reasons[item.id] != before
+    window.undo_action.trigger()
+    assert item.kind == "other"
+
+
+def test_renaming_an_item_guesses_its_type(window):
+    item = add_item(window, "New item")
+    model = window.dimensions_editor.model
+    assert model.setData(model.index(0, COLUMN_OF["name"]), "Coffee mug")
+    assert item.kind == "drink"
+    window.undo_action.trigger()
+    assert item.name == "New item" and item.kind == "other"
+    # A type the user chose is kept when renaming.
+    assert model.setData(model.index(0, COLUMN_OF["kind"]), "lamp")
+    assert model.setData(model.index(0, COLUMN_OF["name"]), "Phone stand")
+    assert item.kind == "lamp"
+
+
+def test_desk_layout_lists_a_reason_for_every_item(window):
+    for name in ("Monitor", "Mug"):
+        add_item(window, name)
+    window.suggestions.changed.emit()
+    panel = window.pane_area.panes["layout"].content
+    texts = [panel.reasons.item(n).text() for n in range(panel.reasons.count())]
+    assert len(texts) == 2 and texts[0].startswith("Monitor: ")

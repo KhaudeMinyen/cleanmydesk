@@ -5,7 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cleanmydesk.model.project import SIZE_SOURCES, Desk, Item, Project
+from cleanmydesk.model.project import (
+    HANDEDNESS,
+    KINDS,
+    SIZE_SOURCES,
+    TASKS,
+    USAGE_LEVELS,
+    Desk,
+    Item,
+    Project,
+    WorkProfile,
+)
 
 FILE_EXTENSION = ".cmdesk"
 FILE_FORMAT = "cleanmydesk-project"
@@ -29,9 +39,15 @@ def project_to_dict(project: Project) -> dict:
                 "depth_cm": item.depth_cm,
                 "height_cm": item.height_cm,
                 "size_source": item.size_source,
+                "kind": item.kind,
+                "usage": item.usage,
             }
             for item in project.items
         ],
+        "profile": {
+            "handedness": project.profile.handedness,
+            "tasks": list(project.profile.tasks),
+        },
     }
 
 
@@ -61,13 +77,23 @@ def project_from_dict(data: dict) -> Project:
                     depth_cm=_positive(raw["depth_cm"]),
                     height_cm=_positive(raw["height_cm"]),
                     size_source=source,
+                    # Files saved before these were added get the defaults.
+                    kind=raw.get("kind") if raw.get("kind") in KINDS else "other",
+                    usage=raw.get("usage") if raw.get("usage") in USAGE_LEVELS else "sometimes",
                 )
             )
+        raw_profile = data.get("profile") or {}
+        handedness = raw_profile.get("handedness")
+        tasks = [task for task in raw_profile.get("tasks", ["typing"]) if task in TASKS]
+        profile = WorkProfile(
+            handedness=handedness if handedness in HANDEDNESS else "right",
+            tasks=tuple(task for task in TASKS if task in tasks),
+        )
     except ProjectFileError:
         raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise ProjectFileError(f"The project file is damaged or incomplete ({exc}).") from exc
-    return Project(desk=desk, items=items)
+    return Project(desk=desk, items=items, profile=profile)
 
 
 def save_project(project: Project, path: Path) -> None:

@@ -1,4 +1,7 @@
-"""The Item dimensions pane: desk size, plus a table to add and edit items."""
+"""The Item dimensions pane: desk size, plus a table to add and edit items.
+
+Besides sizes, each item has a type and how often it is used; the
+layout engine uses both."""
 
 from __future__ import annotations
 
@@ -6,6 +9,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QUndoStack
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
     QHeaderView,
@@ -24,16 +28,20 @@ from cleanmydesk.commands import (
     SetItemFieldCommand,
 )
 from cleanmydesk.document import ProjectDocument
-from cleanmydesk.model.project import DIMENSION_FIELDS, Item, validate_dimension
+from cleanmydesk.model.project import DIMENSION_FIELDS, KINDS, USAGE_LEVELS, Item, validate_dimension
 from cleanmydesk.ui.items_list import SOURCE_LABELS
 
 COLUMNS = [
     ("name", "Item"),
+    ("kind", "Type"),
+    ("usage", "Use"),
     ("width_cm", "Width (cm)"),
     ("depth_cm", "Depth (cm)"),
     ("height_cm", "Height (cm)"),
     ("size_source", "Size from"),
 ]
+COLUMN_OF = {field_name: n for n, (field_name, _label) in enumerate(COLUMNS)}
+CHOICES = {"kind": KINDS, "usage": USAGE_LEVELS}  # columns edited with a drop-down list
 MAX_CM = 1000.0
 
 
@@ -86,6 +94,8 @@ class ItemsTableModel(QAbstractTableModel):
                 return f"{value:g}"
             if field_name == "size_source":
                 return SOURCE_LABELS.get(value, value)
+            if field_name in CHOICES:
+                return CHOICES[field_name].get(value, value)
             return value
         if role == Qt.ItemDataRole.EditRole:
             return value
@@ -109,6 +119,9 @@ class ItemsTableModel(QAbstractTableModel):
             if error:
                 self.message.emit(error)
                 return False
+        elif field_name in CHOICES:
+            if value not in CHOICES[field_name]:
+                return False
         else:
             return False
         if value == getattr(item, field_name):
@@ -126,15 +139,35 @@ class ItemsTableModel(QAbstractTableModel):
 
 
 class DimensionDelegate(QStyledItemDelegate):
-    """Edits sizes with a spin box that allows values up to 1000 cm."""
+    """Edits sizes with a spin box (up to 1000 cm), and type and use with a list."""
 
     def createEditor(self, parent, option, index):
-        if COLUMNS[index.column()][0] in DIMENSION_FIELDS:
+        field_name = COLUMNS[index.column()][0]
+        if field_name in DIMENSION_FIELDS:
             box = _cm_spinbox()
             box.setParent(parent)
             box.setFrame(False)
             return box
+        if field_name in CHOICES:
+            combo = QComboBox(parent)
+            for code, label in CHOICES[field_name].items():
+                combo.addItem(label, code)
+            # Picking from the list saves the choice straight away.
+            combo.activated.connect(lambda _n: (self.commitData.emit(combo), self.closeEditor.emit(combo)))
+            return combo
         return super().createEditor(parent, option, index)
+
+    def setEditorData(self, editor, index) -> None:
+        if isinstance(editor, QComboBox):
+            editor.setCurrentIndex(max(editor.findData(index.data(Qt.ItemDataRole.EditRole)), 0))
+            return
+        super().setEditorData(editor, index)
+
+    def setModelData(self, editor, model, index) -> None:
+        if isinstance(editor, QComboBox):
+            model.setData(index, editor.currentData(), Qt.ItemDataRole.EditRole)
+            return
+        super().setModelData(editor, model, index)
 
 
 class DimensionsEditor(QWidget):

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from cleanmydesk.model.project import Item, Project
+from cleanmydesk.model.project import Item, Project, WorkProfile
 
 
 class ProjectDocument(QObject):
@@ -20,6 +20,7 @@ class ProjectDocument(QObject):
     desk_changed = Signal()
     items_reset = Signal()
     item_changed = Signal(str)  # item id
+    profile_changed = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -30,6 +31,12 @@ class ProjectDocument(QObject):
         self.project = project
         self.path = path
         self.project_replaced.emit()
+
+    # Work profile
+
+    def set_profile(self, profile: WorkProfile) -> None:
+        self.project.profile = profile
+        self.profile_changed.emit()
 
     # Desk
 

@@ -4,9 +4,9 @@
 =====================================================================
 
 Project type : Artificial Intelligence merit badge project (design phase)
-Status       : The main window (panes, sidebar, save/open, undo/redo) and
-               the AI chat assistant are built. The layout suggestion
-               engine and camera are not built yet. See section 15.
+Status       : Built: the main window, the work profile, the layout
+               suggestion engine, and the AI chat assistant. Not built
+               yet: the camera and learning from feedback. See section 15.
 Platforms    : Windows, macOS, and Linux (one codebase)
 Repository   : khaudeminyen/cleanmydesk
 
@@ -273,7 +273,7 @@ ways to get them:
         ui/             screens and widgets (PySide6)
         model/          desk, item, and profile classes
         vision/         camera capture, marker detection, object detection
-        engine/         scoring, layout search, explanations
+        engine/         scoring, layout search, explanations (built)
         ai/             the AI chat assistant (talks to Ollama)
         learning/       feedback storage and weight updates
         storage/        SQLite access
@@ -411,27 +411,36 @@ ways to get them:
 
     +------+-------------------------------+---------------+
     | Undo | Desk layout               -   | Items on    - |
-    | Redo |   (top-down desk drawing)     | desk          |
-    | New  |                               |  (list with   |
+    | Redo |   (suggested layout, and      | desk          |
+    | New  |    why each item is there)    |  (list with   |
     | Save +-------------------------------+  sizes)       |
-    | Open | Item dimensions           -   |               |
-    | +Pane|   desk size, item table,      |               |
-    | AI   |   Add item / Remove item      |               |
+    | Open | Item dimensions           -   +---------------+
+    | +Pane|   desk size, item table,      | Work        - |
+    | AI   |   Add item / Remove item      | profile       |
     |      |                               |               |
     | Gear |                               |               |
     +------+-------------------------------+---------------+
 
   Panes
-    - Desk layout      Draws the desk and items to scale, seen from
-                       above. For now the items are just lined up by
-                       size. The AI suggestion engine will replace this.
+    - Desk layout      Draws the suggested layout to scale, seen from
+                       above, with the easy-reach and arm's-reach zones
+                       shaded. Below it, "Why things are here" gives the
+                       reason for every item. Hovering over an item shows
+                       its reason too. Items that don't fit are listed
+                       as "put away".
     - Items on desk    Lists every item with its width, depth, height,
                        and where the size came from (measured or AI).
                        This list is read-only. To change the desk, use
                        the Item dimensions pane.
     - Item dimensions  Change the desk size, add or remove items, and
-                       double-click any cell to change a name or size.
-                       Sizes typed here count as manual measurements.
+                       double-click any cell to change it: the name, the
+                       type (screen, keyboard, mouse, notebook/paper,
+                       drink, phone, lamp, or other), how often it is
+                       used, or a size. Sizes typed here count as manual
+                       measurements. Naming an item guesses its type, so
+                       "Coffee mug" becomes a drink.
+    - Work profile     Left- or right-handed, and what you do at the
+                       desk (typing, writing by hand, and so on).
 
     The - button on a pane closes it, and it disappears. To bring a
     closed pane back, use the "Open a pane" button on the sidebar. When
@@ -507,10 +516,40 @@ ways to get them:
   running. Start it with `ollama serve` (the Linux installer normally
   starts it automatically), then press Refresh.
 
-15.4  What comes next
+  The AI receives the work profile, the suggested layout, and the
+  reason for each item, so "Explain this arrangement" explains the
+  layout engine's actual plan.
 
-  The layout suggestion engine (section 5), the camera and object
-  recognition (section 6), and learning from feedback.
+15.4  The layout engine
+
+  The layout engine (src/cleanmydesk/engine/layout.py) follows the plan
+  in section 5. Every kind of item has a rule:
+
+    Screen      centered at the back
+    Keyboard    front and center
+    Mouse       beside the keyboard, on the dominant-hand side
+    Drink       dominant-hand side, away from the keyboard (spills)
+    Phone       the other side, so the mouse hand stays on the mouse
+    Lamp        back corner opposite the writing hand (no hand shadow)
+    Notebook    front, dominant side, if you write by hand; else aside
+    Other       pulled closer the more often it is used; rarely used
+                items go to a back corner
+
+  A score adds up how far each item is from its spot, weighted by how
+  often it is used, plus large penalties for overlapping items and for
+  clutter in the space right in front of you. Items are first placed one
+  at a time, most important first. Then simulated annealing tries
+  thousands of small changes (move, swap, turn, put away) to lower the
+  score. If the desk is too full, the least-used items are put away.
+
+  Ollama does not place the items: language models are good with words
+  but unreliable with exact measurements. The engine does the placing,
+  and the AI explains the result and gives advice.
+
+15.5  What comes next
+
+  Learning from feedback (accepting or rejecting suggestions), and the
+  camera and object recognition (section 6).
 
 =====================================================================
   End of readme.txt

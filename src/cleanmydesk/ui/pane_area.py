@@ -1,10 +1,11 @@
-"""Arranges the three panes and shows "Add pane" when all are closed.
+"""Arranges the panes in two columns and shows "Add pane" when all are closed.
 
     +---------------------------+-------------+
     | Desk layout               | Items on    |
     |                           | desk        |
-    +---------------------------+             |
-    | Item dimensions           |             |
+    |                           +-------------+
+    +---------------------------+ Work        |
+    | Item dimensions           | profile     |
     +---------------------------+-------------+
 
 Which panes are open is only how the window looks. It is not part of the
@@ -36,26 +37,29 @@ class PaneArea(QWidget):
     def __init__(
         self,
         undo_stack: QUndoStack,
-        layout_pane: Pane,
-        dimensions_pane: Pane,
-        items_pane: Pane,
+        left: list[Pane],
+        right: list[Pane],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.undo_stack = undo_stack
-        self.panes = {p.pane_id: p for p in (layout_pane, dimensions_pane, items_pane)}
+        self.panes = {p.pane_id: p for p in (*left, *right)}
         self._open = {pane_id: True for pane_id in self.panes}
 
-        self.left_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.left_splitter.setChildrenCollapsible(False)
-        self.left_splitter.addWidget(layout_pane)
-        self.left_splitter.addWidget(dimensions_pane)
-        self.left_splitter.setSizes([400, 250])
+        self.columns = []
+        for panes, sizes in ((left, [420, 250]), (right, [380, 290])):
+            column = QSplitter(Qt.Orientation.Vertical)
+            column.setChildrenCollapsible(False)
+            for pane in panes:
+                column.addWidget(pane)
+            column.setSizes(sizes[: len(panes)])
+            self.columns.append(column)
+        self.left_splitter, self.right_splitter = self.columns
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setChildrenCollapsible(False)
-        self.main_splitter.addWidget(self.left_splitter)
-        self.main_splitter.addWidget(items_pane)
+        for column in self.columns:
+            self.main_splitter.addWidget(column)
         self.main_splitter.setSizes([650, 300])
 
         # Shown in place of the panes when every pane is closed.
@@ -98,8 +102,8 @@ class PaneArea(QWidget):
         self.panes_changed.emit()
 
     def _update_layout(self) -> None:
-        left_open = any(self._open[self.left_splitter.widget(i).pane_id] for i in range(self.left_splitter.count()))
+        for column in self.columns:
+            column.setVisible(any(self._open[column.widget(i).pane_id] for i in range(column.count())))
         any_open = any(self._open.values())
-        self.left_splitter.setVisible(left_open)
         self.main_splitter.setVisible(any_open)
         self.empty_state.setVisible(not any_open)

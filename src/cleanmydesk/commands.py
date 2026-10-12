@@ -5,13 +5,15 @@ from __future__ import annotations
 from PySide6.QtGui import QUndoCommand
 
 from cleanmydesk.document import ProjectDocument
-from cleanmydesk.model.project import DIMENSION_FIELDS, SIZE_SOURCE_MANUAL, Item
+from cleanmydesk.model.project import DIMENSION_FIELDS, SIZE_SOURCE_MANUAL, Item, WorkProfile, guess_kind
 
 FIELD_LABELS = {
     "name": "name",
     "width_cm": "width",
     "depth_cm": "depth",
     "height_cm": "height",
+    "kind": "type",
+    "usage": "how often it is used",
 }
 
 
@@ -36,7 +38,9 @@ class SetItemFieldCommand(QUndoCommand):
     """Change an item's name or one of its sizes.
 
     Typing in a size counts as a manual measurement, so the item's size
-    source switches to "manual" (and switches back on undo).
+    source switches to "manual" (and switches back on undo). Renaming an
+    item whose type is still "Other" also guesses its type from the new
+    name, for example "Coffee mug" becomes a drink.
     """
 
     def __init__(self, doc: ProjectDocument, item_id: str, field_name: str, value) -> None:
@@ -48,15 +52,23 @@ class SetItemFieldCommand(QUndoCommand):
         self.old_value = getattr(item, field_name)
         self.new_value = value
         self.old_source = item.size_source
+        self.old_kind = item.kind
+        self.new_kind = item.kind
+        if field_name == "name" and item.kind == "other":
+            self.new_kind = guess_kind(value)
 
     def redo(self) -> None:
         self.doc.set_item_field(self.item_id, self.field_name, self.new_value)
         if self.field_name in DIMENSION_FIELDS:
             self.doc.set_item_field(self.item_id, "size_source", SIZE_SOURCE_MANUAL)
+        if self.new_kind != self.old_kind:
+            self.doc.set_item_field(self.item_id, "kind", self.new_kind)
 
     def undo(self) -> None:
         self.doc.set_item_field(self.item_id, self.field_name, self.old_value)
         self.doc.set_item_field(self.item_id, "size_source", self.old_source)
+        if self.new_kind != self.old_kind:
+            self.doc.set_item_field(self.item_id, "kind", self.old_kind)
 
 
 class AddItemCommand(QUndoCommand):
@@ -99,3 +111,17 @@ class SetDeskSizeCommand(QUndoCommand):
 
     def undo(self) -> None:
         self.doc.set_desk_size(*self.old_size)
+
+
+class SetProfileCommand(QUndoCommand):
+    def __init__(self, doc: ProjectDocument, profile: WorkProfile) -> None:
+        super().__init__("Change work profile")
+        self.doc = doc
+        self.old_profile = doc.project.profile
+        self.new_profile = profile
+
+    def redo(self) -> None:
+        self.doc.set_profile(self.new_profile)
+
+    def undo(self) -> None:
+        self.doc.set_profile(self.old_profile)

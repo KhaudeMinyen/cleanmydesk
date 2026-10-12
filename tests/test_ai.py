@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from cleanmydesk.ai.ollama_client import ChatMessage, OllamaClient, OllamaError, default_url
 from cleanmydesk.ai.prompts import describe_desk, system_message
-from cleanmydesk.model.project import Desk, Item, Project
+from cleanmydesk.model.project import Desk, Item, Project, WorkProfile
 from fake_ollama import FakeOllama
 
 
@@ -42,19 +42,25 @@ def wait_until(condition, timeout=5.0):
 # Prompts
 
 
-def test_describe_desk_lists_sizes_and_positions():
-    project = Project(Desk(120, 60), [Item("Monitor", 60, 20, 45), Item("Mug", 9, 9, 10, size_source="ai")])
-    text = describe_desk(project)
+def test_describe_desk_lists_sizes_positions_and_reasons():
+    project = Project(
+        Desk(120, 60),
+        [Item("Monitor", 60, 20, 45, kind="screen", usage="constantly"), Item("Mug", 9, 9, 10, size_source="ai")],
+        WorkProfile("left", ("typing", "writing")),
+    )
+    text = system_message(project)
+    assert "Work profile: Left-handed. Tasks at this desk: typing, writing by hand." in text
     assert "Desk: 120 cm wide, 60 cm deep." in text
-    assert "- Monitor: 60 x 20 x 45 cm; placed 0-60 cm from the left, 0-20 cm from the back" in text
-    assert "Mug: 9 x 9 x 10 cm, size estimated by AI" in text
+    assert "- Monitor (screen, used all the time): 60 x 20 x 45 cm; 30-90 cm from the left, 0-20 cm from the back" in text
+    assert "Reason: Centered at the back" in text
+    assert "Mug (other, used sometimes): 9 x 9 x 10 cm (size estimated by AI)" in text
 
 
-def test_describe_desk_mentions_items_that_do_not_fit():
-    project = Project(Desk(50, 50), [Item("Board", 50, 50, 1), Item("Lamp", 10, 10, 30)])
+def test_describe_desk_mentions_items_put_away():
+    project = Project(Desk(50, 50), [Item("Board", 50, 50, 1, usage="constantly"), Item("Lamp", 10, 10, 30)])
     text = describe_desk(project)
-    assert "Lamp: 10 x 10 x 30 cm; does not fit on the desk" in text
-    assert "1 item(s) do not fit" in text
+    assert "Lamp (other, used sometimes): 10 x 10 x 30 cm; off the desk (put away)." in text
+    assert "Reason: Put it in a drawer or on a shelf." in text
 
 
 def test_system_message_for_empty_desk():
@@ -130,7 +136,7 @@ def test_dialog_lists_models_and_answers_a_preset(qapp, fake, settings):
     assert dialog.history[1].content == "Put the mug on the right."
     assert "Put the mug on the right." in dialog.view.toPlainText()
     system = fake.requests[0]["messages"][0]
-    assert system["role"] == "system" and "- Mug: 9 x 9 x 10 cm" in system["content"]
+    assert system["role"] == "system" and "- Mug (other, used sometimes): 9 x 9 x 10 cm" in system["content"]
     assert settings.value("ai/model") is None  # nothing chosen by the user, nothing saved
 
 

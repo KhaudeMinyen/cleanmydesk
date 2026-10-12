@@ -2,15 +2,15 @@ import json
 
 import pytest
 
-from cleanmydesk.layout_preview import arrange_items
-from cleanmydesk.model.project import Desk, Item, Project, validate_dimension
+from cleanmydesk.model.project import Desk, Item, Project, WorkProfile, guess_kind, validate_dimension
 from cleanmydesk.storage.project_file import ProjectFileError, load_project, save_project
 
 
 def sample_project():
     return Project(
         desk=Desk(100, 50),
-        items=[Item("Monitor", 60, 20, 45), Item("Mug", 9, 9, 10, size_source="ai")],
+        items=[Item("Monitor", 60, 20, 45, kind="screen", usage="constantly"), Item("Mug", 9, 9, 10, size_source="ai")],
+        profile=WorkProfile("left", ("typing", "drawing")),
     )
 
 
@@ -50,25 +50,21 @@ def test_validate_dimension():
     assert "larger than" in validate_dimension(desk, item, "width_cm", 120)
 
 
-def test_arrange_items_stays_on_desk_without_overlap():
-    desk = Desk(120, 60)
-    items = [Item(f"Item {n}", 10 + n * 3, 8 + n, 5) for n in range(12)]
-    placements, unplaced = arrange_items(desk, items)
-    assert len(placements) + len(unplaced) == len(items)
-    for p in placements:
-        assert 0 <= p.x_cm and p.x_cm + p.width_cm <= desk.width_cm
-        assert 0 <= p.y_cm and p.y_cm + p.depth_cm <= desk.depth_cm
-    for i, a in enumerate(placements):
-        for b in placements[i + 1:]:
-            overlap_x = a.x_cm < b.x_cm + b.width_cm and b.x_cm < a.x_cm + a.width_cm
-            overlap_y = a.y_cm < b.y_cm + b.depth_cm and b.y_cm < a.y_cm + a.depth_cm
-            assert not (overlap_x and overlap_y)
+def test_old_files_without_profile_or_usage_get_defaults(tmp_path):
+    path = tmp_path / "old.cmdesk"
+    path.write_text(json.dumps({
+        "format": "cleanmydesk-project", "version": 1,
+        "desk": {"width_cm": 100, "depth_cm": 50},
+        "items": [{"id": "a", "name": "Mug", "width_cm": 9, "depth_cm": 9, "height_cm": 10, "size_source": "manual"}],
+    }))
+    project = load_project(path)
+    assert project.items[0].kind == "other" and project.items[0].usage == "sometimes"
+    assert project.profile == WorkProfile()
 
 
-def test_arrange_items_reports_items_that_do_not_fit():
-    desk = Desk(50, 50)
-    big = Item("Big", 50, 50, 1)
-    other = Item("Other", 10, 10, 1)
-    placements, unplaced = arrange_items(desk, [big, other])
-    assert [p.item_id for p in placements] == [big.id]
-    assert unplaced == [other]
+def test_guess_kind_uses_whole_words():
+    assert guess_kind("Coffee mug") == "drink"
+    assert guess_kind("Dell monitor") == "screen"
+    assert guess_kind("Headphones") == "other"
+    assert guess_kind("Highlighter") == "other"
+    assert guess_kind("Books") == "notebook"
